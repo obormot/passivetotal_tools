@@ -16,9 +16,12 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 """
 
 import requests
+requests.packages.urllib3.disable_warnings()
+
 import json
 import logging
 import sys
+
 
 class set_check(object):
 	"""Python decorator to perform field checks and input tests
@@ -34,6 +37,7 @@ class set_check(object):
 				raise Exception('%s is not a valid value (%s)' % (kwargs[self.field], str(self.test)))
 			return func(*args, **kwargs)
 		return wrapped
+
 
 class PassiveTotal(object):
 	"""Python helper library built on top of the PassiveTotal (www.passivetotal.org)
@@ -122,6 +126,12 @@ class PassiveTotal(object):
 		return self._router('GET', 'dynamic', query_value)
 	def get_watching(self, query_value):
 		return self._router('GET', 'watching', query_value)
+	def get_whois_details(self, query_value):
+		return self._router('GET', 'whois/details', query_value)
+	def get_whois_search(self, field_name, query_value):
+		return self._router('GET', 'whois/search', query_value, {'field': field_name})
+	def get_ssl_certificate(self, query_value):
+		return self._router('GET', 'ssl_certificate/details', query_value)
 
 	# Pass-through POST methods
 	@set_check('classification', ['targeted', 'crime', 'multiple', 'benign'])
@@ -162,12 +172,18 @@ class PassiveTotal(object):
 		self._logger.debug('Calling: %s' % call_url)
 		params = {'api_key': self._api_key, 'query': query_value}
 		self._logger.debug('Params: %s' % str(params))
+		if kwargs:
+			params.update(kwargs) # update our dict
 		if method == 'GET':
 			response = requests.get(call_url, params=params, verify=False)
 		else:
-			params.update(kwargs) # update our dict
 			response = requests.post(call_url, data=params, verify=False)
 		self._logger.debug('Response: %s' % str(response))
-		json_response = json.loads(response.text)
+		try:
+			json_response = json.loads(response.content)
+		except ValueError as exc:
+			self._logger.error('ERROR: %s' % exc)
+			return response.content
+
 		self._logger.debug('Loaded JSON: %s' % json_response)
 		return json_response
